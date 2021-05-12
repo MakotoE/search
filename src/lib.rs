@@ -1,4 +1,7 @@
 #![feature(drain_filter)]
+#![feature(test)]
+
+mod benchmark;
 
 use std::fmt::Debug;
 use std::hash::Hash;
