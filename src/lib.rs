@@ -1,24 +1,25 @@
 #![feature(drain_filter)]
 
+use std::fmt::Debug;
 use std::hash::Hash;
 
-trait Set<V>
+trait Set<T>: Debug
 where
-    V: Hash,
+    T: Hash,
 {
-    fn contains(&self, item: &V) -> bool;
+    fn contains(&self, item: &T) -> bool;
     fn len(&self) -> usize;
-    fn insert(&mut self, item: V);
-    fn remove(&mut self, item: &V);
+    fn insert(&mut self, item: T);
+    fn remove(&mut self, item: &T);
 }
 
-#[derive(Default)]
-pub struct SimpleArray {
-    arr: Vec<i32>,
+#[derive(Debug, Default)]
+pub struct SimpleArray<T> {
+    arr: Vec<T>,
 }
 
-impl Set<i32> for SimpleArray {
-    fn contains(&self, item: &i32) -> bool {
+impl<T: Hash + Debug + PartialEq> Set<T> for SimpleArray<T> {
+    fn contains(&self, item: &T) -> bool {
         self.arr.iter().any(|i| i == item)
     }
 
@@ -26,12 +27,97 @@ impl Set<i32> for SimpleArray {
         self.arr.len()
     }
 
-    fn insert(&mut self, item: i32) {
-        self.arr.push(item);
+    fn insert(&mut self, item: T) {
+        if !self.contains(&item) {
+            self.arr.push(item);
+        }
     }
 
-    fn remove(&mut self, item: &i32) {
+    fn remove(&mut self, item: &T) {
         self.arr.drain_filter(|i| i == item);
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct OrderedArray<T> {
+    arr: Vec<T>,
+}
+
+impl<T: Hash + Debug + PartialEq + PartialOrd> Set<T> for OrderedArray<T> {
+    fn contains(&self, item: &T) -> bool {
+        if self.arr.len() == 0 {
+            return false;
+        }
+
+        let mut left = 0_usize;
+        let mut right = self.arr.len() - 1;
+        while left <= right {
+            let middle = (left + right) / 2;
+            if &self.arr[middle] < item {
+                left = middle + 1;
+            } else if &self.arr[middle] > item {
+                if middle == 0 {
+                    break;
+                }
+                right = middle - 1;
+            } else {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    fn len(&self) -> usize {
+        self.arr.len()
+    }
+
+    fn insert(&mut self, item: T) {
+        if self.arr.len() == 0 {
+            self.arr.insert(0, item);
+            return;
+        }
+
+        let mut left = 0_usize;
+        let mut right = self.arr.len() - 1;
+        while left <= right {
+            let middle = (left + right) / 2;
+            if self.arr[middle] < item {
+                left = middle + 1;
+            } else if self.arr[middle] > item {
+                if middle == 0 {
+                    break;
+                }
+                right = middle - 1;
+            } else {
+                return;
+            }
+        }
+
+        self.arr.insert(left, item);
+    }
+
+    fn remove(&mut self, item: &T) {
+        if self.arr.len() == 0 {
+            return;
+        }
+
+        let mut left = 0_usize;
+        let mut right = self.arr.len() - 1;
+        while left <= right {
+            let middle = (left + right) / 2;
+            if &self.arr[middle] < item {
+                left = middle + 1;
+            } else if &self.arr[middle] > item {
+                if middle == 0 {
+                    break;
+                }
+                right = middle - 1;
+            } else {
+                self.arr.remove(middle);
+                return;
+            }
+        }
     }
 }
 
@@ -47,7 +133,8 @@ mod tests {
     }
 
     lazy_static! {
-        static ref SETS: [(fn() -> Box<dyn Set<i32>>, &'static str); 1] = [set!(SimpleArray)];
+        static ref SETS: [(fn() -> Box<dyn Set<i32>>, &'static str); 2] =
+            [set!(SimpleArray<i32>), set!(OrderedArray<i32>)];
     }
 
     #[test]
@@ -56,8 +143,11 @@ mod tests {
             let mut set = constructor();
             assert!(!set.contains(&0), "{}", name);
             set.insert(0);
+            set.insert(0);
+            assert_eq!(set.len(), 1, "{}", name);
             set.insert(2);
             set.insert(1);
+            assert_eq!(set.len(), 3, "{}", name);
             assert!(set.contains(&0), "{}", name);
             assert!(set.contains(&1), "{}", name);
             assert!(set.contains(&2), "{}", name);
@@ -65,9 +155,10 @@ mod tests {
             assert!(!set.contains(&0), "{}", name);
             assert!(set.contains(&1), "{}", name);
             assert!(set.contains(&2), "{}", name);
-            set.remove(&1);
             set.remove(&2);
+            set.remove(&1);
             assert_eq!(set.len(), 0);
+            set.remove(&0);
         }
     }
 }
